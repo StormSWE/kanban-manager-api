@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "boards",
     "tasks",
     "comments",
+    "activity",
 ]
 
 MIDDLEWARE = [
