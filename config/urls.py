@@ -29,6 +29,7 @@ urlpatterns = [
         name="api-docs",
     ),
     path("api/v1/users/", include("users.urls")),
+    path("api/v1/teams/", include("teams.urls")),
 ]
 
 if settings.DEBUG:
