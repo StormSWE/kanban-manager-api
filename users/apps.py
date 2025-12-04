@@ -2,5 +2,9 @@ from django.apps import AppConfig
 
 
 class UsersConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'users'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "users"
+
+    def ready(self):
+        # Import signal handlers when the app is ready.
+        from . import signals  # noqa: WPS433,F401
