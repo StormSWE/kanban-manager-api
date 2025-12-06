@@ -18,24 +18,30 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/schema/", SpectacularAPIView.as_view(), name="api-schema"),
-    path(
-        "api/docs/",
-        SpectacularSwaggerView.as_view(url_name="api-schema"),
-        name="api-docs",
-    ),
     path("api/v1/users/", include("users.urls")),
     path("api/v1/teams/", include("teams.urls")),
     path("api/v1/projects/", include("projects.urls")),
     path("api/v1/boards/", include("boards.urls")),
     path("api/v1/tasks/", include("tasks.urls")),
     path("api/v1/comments/", include("comments.urls")),
-        path("api/v1/notifications/", include("notifications.urls")),
-        path("api/v1/activity/", include("activity.urls")),
+    path("api/v1/notifications/", include("notifications.urls")),
+    path("api/v1/activity/", include("activity.urls")),
+
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path(
+        "api/schema/swagger/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="swagger-ui",
+    ),
+    path(
+        "api/schema/redoc/",
+        SpectacularRedocView.as_view(url_name="schema"),
+        name="redoc",
+    ),
 ]
 
 if settings.DEBUG:

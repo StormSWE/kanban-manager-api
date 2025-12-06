@@ -1,5 +1,6 @@
 from datetime import timedelta
 from pathlib import Path
+from django.core.exceptions import ImproperlyConfigured
 
 import environ
 
@@ -14,7 +15,11 @@ if ENV_FILE.exists():
 
 SECRET_KEY = env("SECRET_KEY", default="change-me")
 DEBUG = env.bool("DEBUG", default=True)
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["*"])
+
+# By default don't allow all hosts unless explicitly configured via env. In
+# development we keep the default simple (localhost) while production must
+# explicitly configure ALLOWED_HOSTS in the environment.
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost"] if DEBUG else [])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -28,6 +33,8 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "django_filters",
     "drf_spectacular",
+    "drf_spectacular_sidecar",
+    "rest_framework_simplejwt.token_blacklist",
     "users",
     "teams",
     "projects",
@@ -122,6 +129,21 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 25,
 }
 
+# Rate limiting (throttling) - these are defaults; they can be tuned via the
+# environment variables. Scoped throttles can be added per-view if needed.
+REST_FRAMEWORK.update({
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        # Default values; set env var THROTTLE_ANON_PER_MIN or THROTTLE_USER_PER_MIN
+        # to override.
+        "anon": env.str("THROTTLE_ANON_PER_MIN", default="10/min"),
+        "user": env.str("THROTTLE_USER_PER_MIN", default="100/min"),
+    },
+})
+
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
@@ -130,14 +152,29 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_id",
 }
 
+# Rotate refresh tokens and enable blacklisting. This is helpful to reduce the
+# impact of a leaked refresh token.
+SIMPLE_JWT.update({
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+})
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "Kanban Manager API",
-    "DESCRIPTION": "API documentation for the Kanban Manager platform",
+    "DESCRIPTION": "API documentation for all backend modules",
     "VERSION": "1.0.0",
+    # If you want to control who can view the schema, set SERVE_PERMISSIONS accordingly (e.g. AllowAny or IsAuthenticated)
     "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
+    # Prevent the schema JSON embedding into the UI page; keep API responses separately available.
+    "SERVE_INCLUDE_SCHEMA": False,
+    # Split request/response components for cleaner schema rendering across components
+    "COMPONENT_SPLIT_REQUEST": True,
 }
 
-CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL", default=True)
+CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL", default=False)
+# Optional: Set a white-list of allowed origins as comma separated list
+# Example: CORS_ALLOWED_ORIGINS=http://localhost:3000,https://example.com
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 
 EMAIL_BACKEND = env(
     "EMAIL_BACKEND",
@@ -155,3 +192,22 @@ CELERY_BEAT_SCHEDULE = {}
 # avoid requiring a running Redis/Celery worker in CI or dev mode. You can override
 # this by setting CELERY_TASK_ALWAYS_EAGER=False explicitly in your .env for production.
 CELERY_TASK_ALWAYS_EAGER = env("CELERY_TASK_ALWAYS_EAGER", default=DEBUG)
+
+# Security related settings. These should be configured in production where
+# DEBUG=False. They default to secure values but can be overridden via env
+# variables where necessary.
+SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=not DEBUG)
+CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=not DEBUG)
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+SECURE_REFERRER_POLICY = "no-referrer"
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=not DEBUG)
+SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=31536000 if not DEBUG else 0)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=True)
+SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", default=True)
+
+# Validate the SECRET_KEY in production (i.e., when DEBUG is False) to avoid
+# accidental disclosure of a weak default key.
+if not DEBUG and SECRET_KEY == "change-me":
+    raise ImproperlyConfigured("SECRET_KEY must be set to a secure value in production (via .env)")
