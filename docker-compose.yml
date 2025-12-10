@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:16
@@ -9,6 +7,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-kanban}
       POSTGRES_USER: ${POSTGRES_USER:-kanban}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kanban}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-kanban}:${POSTGRES_PASSWORD:-kanban}@db:5432/${POSTGRES_DB:-kanban}}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kanban}"]
       interval: 10s
@@ -39,6 +38,13 @@ services:
     command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --access-logfile - --error-logfile -
     env_file:
       - .env
+    environment:
+      # Always provide a default DATABASE_URL to avoid falling back to sqlite
+      # when no .env exists. Build the default from POSTGRES_* variables so
+      # it uses the same credentials as the db service.
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-kanban}:${POSTGRES_PASSWORD:-kanban}@db:5432/${POSTGRES_DB:-kanban}}
+      # Only run migrations in the web container by default; prevents DB races.
+      RUN_MIGRATIONS: "true"
     volumes:
       - .:/app
       - static_volume:/app/staticfiles
@@ -53,9 +59,12 @@ services:
   worker:
     build: .
     container_name: kanban_worker
-    command: celery -A config worker -l info
+    command: celery -A config.celery worker -l info
     env_file:
       - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-kanban}:${POSTGRES_PASSWORD:-kanban}@db:5432/${POSTGRES_DB:-kanban}}
+      RUN_MIGRATIONS: "false"
     volumes:
       - .:/app
     depends_on:
@@ -67,9 +76,12 @@ services:
   beat:
     build: .
     container_name: kanban_beat
-    command: celery -A config beat -l info
+    command: celery -A config.celery beat -l info
     env_file:
       - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-kanban}:${POSTGRES_PASSWORD:-kanban}@db:5432/${POSTGRES_DB:-kanban}}
+      RUN_MIGRATIONS: "false"
     volumes:
       - .:/app
     depends_on:
@@ -91,9 +103,29 @@ services:
     networks:
       - backend
 
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: kanban_pgadmin
+    environment:
+      # The default admin email must be a valid address (contains a dot after domain)
+      # Use .env to override these values in development. Example: PGADMIN_DEFAULT_EMAIL=admin@example.com
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - backend
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
 volumes:
   postgres_data:
   static_volume:
+  pgadmin_data:
 
 networks:
   backend:
