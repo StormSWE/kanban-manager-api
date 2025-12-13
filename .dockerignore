@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.swp
+*.swo
+*.log
+.env
+.git
+.gitignore
+Dockerfile
+node_modules/
+staticfiles/
+media/
+postgres_data/
+.idea/
+.vscode/
