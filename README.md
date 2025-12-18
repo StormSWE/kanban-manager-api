@@ -188,7 +188,5 @@ If you’re interested in backend architecture, async systems, or production-rea
 
 ---
 
-End of file.
 
-All endpoints are versioned under:
 
